@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Drawing;
+using System.Runtime.Remoting.Messaging;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -83,6 +84,30 @@ namespace TimUtils
         public static implicit operator Point(Vector2 v)
         {
             return new Point((int)v.X, (int)v.Y);
+        }
+        public static implicit operator Vector2(PointF p)
+        {
+            return new Vector2(p.X, p.Y);
+        }
+        public static implicit operator PointF(Vector2 v)
+        {
+            return new PointF(v.X, v.Y);
+        }
+        public static implicit operator Vector2(Size s)
+        {
+            return new Vector2(s.Width, s.Height);
+        }
+        public static implicit operator Size(Vector2 v)
+        {
+            return new Size((int)v.X, (int)v.Y);
+        }
+        public static implicit operator Vector2(SizeF s)
+        {
+            return new Vector2(s.Width, s.Height);
+        }
+        public static implicit operator SizeF(Vector2 v)
+        {
+            return new SizeF(v.X, v.Y);
         }
         public static implicit operator string(Vector2 v)
         {

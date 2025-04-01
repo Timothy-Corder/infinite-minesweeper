@@ -9,6 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TimUtils;
+using static System.Collections.Specialized.BitVector32;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.ProgressBar;
 
 namespace InfiniteMineSweeper
 {
@@ -20,6 +22,9 @@ namespace InfiniteMineSweeper
         Vector2 viewportVelocity = Vector2.Zero;
         List<Vector2> openCells = new List<Vector2>();
         List<Vector2> flaggedCells = new List<Vector2>();
+        List<Vector2> booms = new List<Vector2>();
+        List<Vector2> failedSectors = new List<Vector2>();
+        List<Vector2> succeededSectors = new List<Vector2>();
         private HashSet<Keys> pressedKeys = new HashSet<Keys>();
         int zoom;
         int ViewportZoom
@@ -36,8 +41,14 @@ namespace InfiniteMineSweeper
         }
         int MineChance = 20;
 
-        Pen thinPen = new Pen(Color.Black, 3);
-        Pen thickPen = new Pen(Color.Black, 5);
+        Pen thinPen = new Pen(Color.Black, 1);
+        Pen thickPen = new Pen(Color.Black, 3);
+
+        readonly Bitmap[] numbers = new Bitmap[8] { Assets.one, Assets.two, Assets.three, Assets.four, Assets.five, Assets.six, Assets.seven, Assets.eight };
+        readonly Bitmap flag = Assets.flag;
+        readonly Bitmap mine = Assets.mine;
+        readonly Bitmap boom = Assets.boom;
+
         public GameForm(FileStream save)
         {
             Disposed += (sender, e) =>
@@ -50,6 +61,7 @@ namespace InfiniteMineSweeper
             };
             Save = save;
             DoubleBuffered = true;
+            WindowState = FormWindowState.Maximized;
             InitializeGame();
 
             InitializeComponent();
@@ -99,15 +111,16 @@ namespace InfiniteMineSweeper
 
         private void GameForm_Scroll(object sender, MouseEventArgs e)
         {
+            float zoomChange = 0;
             if (e.Delta > 0)
             {
-                ViewportZoom = (int)((float)ViewportZoom * 1.2f);
+                zoomChange = (float)ViewportZoom * 1.2f;
             }
             else
             {
-                ViewportZoom = (int)((float)ViewportZoom / 1.2f);
+                zoomChange = (float)ViewportZoom / 1.2f;
             }
-                Console.WriteLine(ViewportZoom);
+            ViewportZoom = (int)zoomChange;
             Invalidate();
         }
 
@@ -121,11 +134,22 @@ namespace InfiniteMineSweeper
             {
                 if (!OpenCell(cell))
                 {
-                    MessageBox.Show("You lose!");
-                    // Delete the save file lol
-                    Save.Close();
-                    File.Delete("InfMS.save");
-                    Environment.Exit(0);
+                    booms.Add(cell);
+                    failedSectors.Add(new Vector2((int)cell.X / 10, (int)cell.Y / 10));
+                    Vector2 sector = new Vector2(((int)cell.X) / 10, ((int)cell.Y) / 10);
+                    for (int i = 0; i < 10; i++)
+                    {
+                        for (int j = 0; j < 10; j++)
+                        {
+                            openCells.Remove(new Vector2((int)sector.X * 10 + i, (int)sector.Y * 10 + j));
+                        }
+                    }
+                    //// I'll miss this code. Deleting the save was funny.
+                    //MessageBox.Show("You lose!");
+                    //// Delete the save file lol
+                    //Save.Close();
+                    //File.Delete("InfMS.save");
+                    //Environment.Exit(0);
                 }
             }
             else if (e.Button == MouseButtons.Right)
@@ -147,22 +171,34 @@ namespace InfiniteMineSweeper
             seed = new byte[4];
             Save.Read(seed, 0, 4);
 
-            // Read the rest of the file as open cells or flags, saved as x y pairs and a boolean. Any cell not in the file is considered closed.
+            // Read the rest of the file as open cells, flags, or failed sectors, saved as x y pairs and a type byte. Any cell not in the file is considered closed.
             while (Save.Position < Save.Length)
             {
                 byte[] buffer = new byte[9];
                 Save.Read(buffer, 0, 9);
                 int x = BitConverter.ToInt32(buffer, 0);
                 int y = BitConverter.ToInt32(buffer, 4);
-                bool flag = BitConverter.ToBoolean(buffer, 8);
+                byte type = buffer[8];
                 
-                if (flag)
+                switch (type)
+                {
+                    case 0x00:
+                        openCells.Add(new Vector2(x, y));
+                        break;
+                    case 0x01:
+                        flaggedCells.Add(new Vector2(x, y));
+                        break;
+                    case 0x02:
+                        booms.Add(new Vector2(x, y));
+                        failedSectors.Add(new Vector2(x, y));
+                        break;
+                    case 0x03:
+                        succeededSectors.Add(new Vector2(x, y));
+                        break;
+                }
+                if (type == 0x01)
                 {
                     flaggedCells.Add(new Vector2(x, y));
-                }
-                else
-                {
-                    openCells.Add(new Vector2(x, y));
                 }
             }
         }
@@ -173,22 +209,40 @@ namespace InfiniteMineSweeper
             foreach (Vector2 cell in openCells)
             {
                 byte[] buffer = new byte[9];
+                byte type = 0x00;
                 BitConverter.GetBytes((Int32)cell.X).CopyTo(buffer, 0);
                 BitConverter.GetBytes((Int32)cell.Y).CopyTo(buffer, 4);
-                BitConverter.GetBytes(false).CopyTo(buffer, 8);
+                (new byte[1] { type }).CopyTo(buffer, 8);
                 Save.Write(buffer, 0, 9);
             }
             foreach (Vector2 cell in flaggedCells)
             {
                 byte[] buffer = new byte[9];
+                byte type = 0x01;
                 BitConverter.GetBytes((Int32)cell.X).CopyTo(buffer, 0);
                 BitConverter.GetBytes((Int32)cell.Y).CopyTo(buffer, 4);
-                BitConverter.GetBytes(true).CopyTo(buffer, 8);
+                (new byte[1] { type }).CopyTo(buffer, 8);
+                Save.Write(buffer, 0, 9);
+            }
+            foreach (Vector2 cell in booms)
+            {
+                byte[] buffer = new byte[9];
+                byte type = 0x02;
+                BitConverter.GetBytes((Int32)cell.X).CopyTo(buffer, 0);
+                BitConverter.GetBytes((Int32)cell.Y).CopyTo(buffer, 4);
+                (new byte[1] { type }).CopyTo(buffer, 8);
                 Save.Write(buffer, 0, 9);
             }
         }
         internal bool OpenCell(Vector2 cell)
         {
+            Vector2 sector = new Vector2(((int)cell.X) / 10,((int)cell.Y) / 10);
+
+            if (failedSectors.Contains(sector) || succeededSectors.Contains(sector))
+            {
+                return true;
+            }
+
             if (cell == null || openCells.Contains(cell))
             {
                 return true;
@@ -197,7 +251,7 @@ namespace InfiniteMineSweeper
             {
                 return false;
             }
-            else if (!openCells.Contains(cell))
+            else if (!(openCells.Contains(cell) || flaggedCells.Contains(cell)))
             {
                 openCells.Add(cell);
                 if (NeighborCount((int)cell.X, (int)cell.Y) == 0)
@@ -211,7 +265,39 @@ namespace InfiniteMineSweeper
                     }
                 }
             }
-            
+            bool sectorCleared = false;
+            for (int i = 0; i < 10; i++)
+            {
+                for (int j = 0; j < 10; j++)
+                {
+                    if (!openCells.Contains(new Vector2((int)sector.X * 10 + i, (int)sector.Y * 10 + j)))
+                    {
+                        if (!(flaggedCells.Contains(new Vector2((int)sector.X * 10 + i, (int)sector.Y * 10 + j)) && CheckIsMine((int)sector.X * 10 + i, (int)sector.Y * 10 + j, MineChance)))
+                        sectorCleared = false;
+                        break;
+                    }
+                    sectorCleared = true;
+                }
+                if (!sectorCleared)
+                {
+                    break;
+                }
+            }
+            if (sectorCleared)
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    for (int j = 0; j < 10; j++)
+                    {
+                        openCells.Remove(new Vector2((int)sector.X * 10 + i, (int)sector.Y * 10 + j));
+                    }
+                    if (!sectorCleared)
+                    {
+                        break;
+                    }
+                }
+                succeededSectors.Add(sector);
+            }
             return true;
         }
         public bool CheckIsMine(int x, int y, int percentChance)
@@ -275,60 +361,84 @@ namespace InfiniteMineSweeper
             // Draw the grid lines
 
             // Calculate the number of horizontal and vertical lines to draw. The lines are drawn independently of the location and zoom, so we need to draw enough lines to cover the entire screen, as closely as they should be drawn.
-            int horizontalLines = (int)Math.Ceiling((float)ClientSize.Height / ViewportZoom);
-            int verticalLines = (int)Math.Ceiling((float)ClientSize.Width / ViewportZoom);
+            int horizontalLines = (int)Math.Ceiling((float)ClientSize.Height / ViewportZoom) + 1;
+            int verticalLines = (int)Math.Ceiling((float)ClientSize.Width / ViewportZoom) + 1;
 
-
-
-            // Color all opened cells white, taking into account the viewport location and zoom
-            foreach (Vector2 cell in openCells)
-            {
-                g.FillRectangle(Brushes.White, (cell.X - viewportLocation.X) * ViewportZoom, (cell.Y - viewportLocation.Y) * ViewportZoom, ViewportZoom, ViewportZoom);
-            }
-            // Draw a red square on top of all flagged cells
+            // Reveal everything in a failed sector, draw a mine on top of all mines, draw a flag on top of all flagged cells, and darken the whole sector
+            
+            // Draw a flag on top of all flagged cells
             foreach (Vector2 cell in flaggedCells)
             {
-                g.FillRectangle(Brushes.Red, (cell.X - viewportLocation.X) * ViewportZoom, (cell.Y - viewportLocation.Y) * ViewportZoom, ViewportZoom, ViewportZoom);
-            }
-
-            Pen penToUse;
-            if (ViewportZoom > 50)
-            {
-                penToUse = thickPen;
-            }
-            else if (ViewportZoom > 8)
-            {
-                penToUse = thinPen;
-            }
-            else
-            {
-                penToUse = Pens.Black;
-            }
-
-            // Draw sets of 10x10 lines to make the grid more visible
-            for (int i = 0; i < horizontalLines; i += 10)
-            {
-                g.DrawLine(penToUse, 0, i * ViewportZoom - (viewportLocation.Y % 1) * ViewportZoom, ClientSize.Width, i * ViewportZoom - (viewportLocation.Y % 1) * ViewportZoom);
-            }
-
-            // Draw the lines over
-            for (int i = 0; i < horizontalLines; i++)
-            {
-                g.DrawLine(penToUse, 0, i * ViewportZoom - (viewportLocation.Y % 1) * ViewportZoom, ClientSize.Width, i * ViewportZoom - (viewportLocation.Y % 1) * ViewportZoom);
-            }
-            for (int i = 0; i < verticalLines; i++)
-            {
-                g.DrawLine(penToUse, i * ViewportZoom - (viewportLocation.X % 1) * ViewportZoom, 0, i * ViewportZoom - (viewportLocation.X % 1) * ViewportZoom, ClientSize.Height);
+                g.DrawImage(flag, new RectangleF(((cell - viewportLocation) * ViewportZoom) + new Vector2((float)ViewportZoom / 10), new Vector2((float)ViewportZoom * 0.8f)));
             }
 
             // Write each cell's neighbor count, unless it's zero
             foreach (Vector2 cell in openCells)
             {
+                g.FillRectangle(Brushes.White, (cell.X - viewportLocation.X) * ViewportZoom, (cell.Y - viewportLocation.Y) * ViewportZoom, ViewportZoom, ViewportZoom);
+
                 int count = NeighborCount((int)cell.X, (int)cell.Y);
-                if (count > 0)
+
+                if (count > 0 && ViewportZoom > 8)
                 {
-                    g.DrawString(count.ToString(), DefaultFont, Brushes.Black, (cell.X - viewportLocation.X) * ViewportZoom, (cell.Y - viewportLocation.Y) * ViewportZoom);
+                    g.DrawImage(numbers[count - 1], new RectangleF(((cell - viewportLocation) * ViewportZoom) + new Vector2((float)ViewportZoom / 10), new Vector2((float)ViewportZoom * 0.8f)));
                 }
+            }
+
+            foreach (Vector2 sector in failedSectors)
+            {
+                // Skip sectors that are outside the viewport
+                if (sector.X < viewportLocation.X || sector.X > viewportLocation.X + ClientSize.Width / ViewportZoom || sector.Y < viewportLocation.Y || sector.Y > viewportLocation.Y + ClientSize.Height / ViewportZoom)
+                {
+                    continue;
+                }
+
+                g.FillRectangle(Brushes.White, ((sector.X * 10) - viewportLocation.X) * ViewportZoom, ((sector.Y * 10) - viewportLocation.Y) * ViewportZoom, ViewportZoom * 10, ViewportZoom * 10);
+
+                for (int i = 0; i < 10; i++)
+                {
+                    for (int j = 0; j < 10; j++)
+                    {
+                        int x = (int)sector.X * 10 + i;
+                        int y = (int)sector.Y * 10 + j;
+                        if (CheckIsMine(x, y, MineChance))
+                        {
+                            if (!booms.Contains(new Vector2(x, y)))
+                            {
+                                g.DrawImage(mine, new RectangleF(((new Vector2(x, y) - viewportLocation) * ViewportZoom) + new Vector2((float)ViewportZoom / 10), new Vector2((float)ViewportZoom * 0.8f)));
+                            }
+                            else
+                            {
+
+                                g.DrawImage(boom, new RectangleF(((new Vector2(x, y) - viewportLocation) * ViewportZoom) + new Vector2((float)ViewportZoom / 10), new Vector2((float)ViewportZoom * 0.8f)));
+                            }
+                        }
+                        else
+                        {
+                            int count = NeighborCount(x, y);
+                            if (count > 0 && ViewportZoom > 8)
+                            {
+                                g.DrawImage(numbers[count - 1], new RectangleF(((new Vector2(x, y) - viewportLocation) * ViewportZoom) + new Vector2((float)ViewportZoom / 10), new Vector2((float)ViewportZoom * 0.8f)));
+                            }
+                        }
+                    }
+                }
+
+                g.FillRectangle(new SolidBrush(Color.FromArgb(100, Color.Black)), ((sector.X * 10) - viewportLocation.X) * ViewportZoom, ((sector.Y * 10) - viewportLocation.Y) * ViewportZoom, ViewportZoom * 10, ViewportZoom * 10);
+            }
+
+            // Draw the lines over, making some thicker to group the grid into 10x10 sectors
+            for (int i = 0; i < horizontalLines; i++)
+            {
+                float y = (i - (viewportLocation.Y % 1)) * ViewportZoom;
+                Pen pen = ((i + (int)viewportLocation.Y) % 10 == 0) ? thickPen : thinPen;
+                g.DrawLine(pen, 0, y, ClientSize.Width, y);
+            }
+            for (int i = 0; i < verticalLines; i++)
+            {
+                float x = (i - (viewportLocation.X % 1)) * ViewportZoom;
+                Pen pen = ((i + (int)viewportLocation.X) % 10 == 0) ? thickPen : thinPen;
+                g.DrawLine(pen, x, 0, x, ClientSize.Height);
             }
         }
     }

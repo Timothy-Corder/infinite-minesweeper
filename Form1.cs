@@ -442,4 +442,35 @@ namespace InfiniteMineSweeper
             }
         }
     }
+    public partial class MenuForm : Form
+    {
+        public string SavePath { get; private set; }
+        Vector2 backgroundPosition = new Vector2(Vector2.Zero);
+        public MenuForm()
+        {
+            DoubleBuffered = true;
+            FormBorderStyle = FormBorderStyle.None;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.Clear(Color.LightGray);
+
+            // Draw the background, a grid of lines moving down and to the right
+            int lineDistance = 50;
+            float speed = 5;
+
+            backgroundPosition += new Vector2(speed);
+
+            for (int x = 0; x < ClientSize.Width; x += lineDistance)
+            {
+                g.DrawLine(Pens.Black, x - backgroundPosition.X % lineDistance, 0, x - backgroundPosition.X % lineDistance, ClientSize.Height);
+            }
+
+            g.DrawString("Infinite Mine Sweeper", new Font("Arial", 24), Brushes.Black, new PointF(10, 10));
+            g.DrawString("Click anywhere to start", new Font("Arial", 12), Brushes.Black, new PointF(10, 40));
+        }
+    }
 }

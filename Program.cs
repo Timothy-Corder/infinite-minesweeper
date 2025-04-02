@@ -18,6 +18,10 @@ namespace InfiniteMineSweeper
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            MenuForm menu = new MenuForm();
+            Application.Run(menu);
+            string savePath = menu.SavePath;
+
             FileStream save = null;
             if (!File.Exists("InfMS.save"))
             {

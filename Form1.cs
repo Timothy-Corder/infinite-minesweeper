@@ -44,7 +44,7 @@ namespace InfiniteMineSweeper
 
         private RectangleF drawingRect = new RectangleF();
 
-        public GameForm(FileStream save, int score, int fails)
+        public GameForm(FileStream save)
         {
             Disposed += (sender, e) =>
             {
@@ -215,10 +215,6 @@ namespace InfiniteMineSweeper
                     case 0x03:
                         succeededSectors.Add(new Vector2(x, y));
                         break;
-                }
-                if (type == 0x01)
-                {
-                    flaggedCells.Add(new Vector2(x, y));
                 }
             }
         }
@@ -564,7 +560,7 @@ namespace InfiniteMineSweeper
         Vector2 backgroundPosition = new Vector2(Vector2.Zero);
         int backgroundSeed = new Random().Next();
         public int save = 0;
-        public MenuForm()
+        public MenuForm(int[] wins, int[] losses)
         {
             DoubleBuffered = true;
             FormBorderStyle = FormBorderStyle.None;
@@ -577,28 +573,36 @@ namespace InfiniteMineSweeper
             timer.Tick += (s, e) => { Invalidate(); };
             timer.Start();
 
-            for (int i = 1; i <= 4; i++)
+            for (int i = 0; i < 4; i++)
             {
                 Button btn = new Button();
-                btn.Text = $"Save {i}";
-                btn.Tag = i;
+                if (File.Exists($"save{i+1}.imssave"))
+                {
+                    btn.Text = $"Save {i + 1}\nCleared sectors: {wins[i]}\nFailed Sectors: {losses[i]}";
+                }
+                else
+                {
+                    btn.Text = "New Save";
+                }
+                btn.Tag = i+1;
                 btn.Size = new Size(200, 50);
-                btn.Location = new Point(400, 250 + (i - 1) * 60);
+                btn.Location = new Point(400, 250 + i * 60);
                 btn.Click += (s, e) => { save = (int)((Button)s).Tag; Close(); };
                 Controls.Add(btn);
 
                 // Check if the save exists so we know if we should add a delete button
-                if (File.Exists($"save{i}.imssave"))
+                if (File.Exists($"save{i+1}.imssave"))
                 {
                     Button deleteBtn = new Button();
-                    deleteBtn.Text = $"Delete Save {i}";
-                    deleteBtn.Tag = i;
+                    deleteBtn.Text = $"Delete Save {i+1}";
+                    deleteBtn.Tag = i+1;
                     deleteBtn.Size = new Size(200, 50);
-                    deleteBtn.Location = new Point(600, 250 + (i - 1) * 60);
+                    deleteBtn.Location = new Point(600, 250 + i * 60);
                     deleteBtn.Click += (s, e) =>
                     {
                         File.Delete($"save{(int)((Button)s).Tag}.imssave");
                         Controls.Remove(deleteBtn);
+                        btn.Text = "New Save";
                     };
                     Controls.Add(deleteBtn);
                 }

@@ -18,30 +18,37 @@ namespace InfiniteMineSweeper
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            int wins1 = -1;
-            int losses1 = -1;
-            int wins2 = -1;
-            int losses2 = -1;
-            int wins3 = -1;
-            int losses3 = -1;
-            int wins4 = -1;
-            int losses4 = -1;
+            int[] wins = new int[4];
+            int[] losses = new int[4];
 
 
-            try
+            for (int i = 0; i < 4; i++)
             {
-                FileStream s = File.Open("save1.imssave", FileMode.Open);
+                FileStream s = null;
+                try
+                {
+                    s = File.Open($"save{i+1}.imssave", FileMode.Open);
+                    s.Seek(4, SeekOrigin.Begin);
 
-                byte[] Ws = new byte[4];
-                s.Read(Ws, 4, 4);
-                byte[] Ls = new byte[4];
-                s.Read(Ls, 0, 4);
+                    byte[] Ws = new byte[4];
+                    s.Read(Ws, 0, 4);
+                    byte[] Ls = new byte[4];
+                    s.Read(Ls, 0, 4);
 
-                int win = BitConverter.ToInt32(wins, 0);
-                int loss = BitConverter.ToInt32(losses, 0);
+                    wins[i] = BitConverter.ToInt32(Ws, 0);
+                    losses[i] = BitConverter.ToInt32(Ls, 0);
+                    s.Dispose();
+                }
+                catch
+                {
+                    if (s != null)
+                    {
+                        s.Dispose();
+                    }
+                }
             }
-
-            MenuForm menu = new MenuForm();
+            
+            MenuForm menu = new MenuForm(wins, losses);
             Application.Run(menu);
             string savePath = $"save{ menu.save }.imssave";
 
@@ -55,18 +62,18 @@ namespace InfiniteMineSweeper
                 save.Write(seed, 0, 4);
                 save.WriteByte(0);
                 save.WriteByte(0);
-                save.Close();
+                save.Dispose();
             }
 
             save = File.Open(savePath, FileMode.Open);
+            var test = new byte[12];
+            save.Read(test, 0, 12);
+            foreach (byte b in test)
+            {
+                Console.Write(b + " ");
+            }
+            save.Seek(0, SeekOrigin.Begin);
 
-            byte[] wins = new byte[4];
-            save.Read(wins, 4, 4);
-            byte[] losses = new byte[4];
-            save.Read(losses, 0, 4);
-
-            int win = BitConverter.ToInt32(wins, 0);
-            int loss = BitConverter.ToInt32(losses, 0);
 
             Application.Run(new GameForm(save));
         }
